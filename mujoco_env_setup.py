@@ -32,23 +32,41 @@ def ensure_pip_packages() -> None:
     run([sys.executable, "-m", "pip", "install", "-U", *packages])
 
 
-def check_gpu() -> None:
+def check_gpu() -> list[str]:
     print("\n[CHECK] GPU availability")
     result = subprocess.run(["nvidia-smi"], capture_output=True, text=True)
+    gpu_names: list[str] = []
     if result.returncode == 0:
         print("GPU detected by nvidia-smi.")
+        query = subprocess.run(
+            ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
+            capture_output=True,
+            text=True,
+        )
+        if query.returncode == 0:
+            gpu_names = [line.strip() for line in query.stdout.splitlines() if line.strip()]
+            if gpu_names:
+                print("GPU model(s):", ", ".join(gpu_names))
     else:
         print("No GPU detected by nvidia-smi (this is okay for CPU-only tests).")
+    return gpu_names
 
 
-def configure_env_vars() -> None:
+def configure_env_vars(gpu_names: list[str]) -> None:
     # Colab usually needs this for MuJoCo EGL rendering.
     os.environ.setdefault("MUJOCO_GL", "egl")
+
+    # Colab G4 runtimes can hit CUDA/PTXAS incompatibilities with JAX GPU.
+    # We default to CPU backend on G4 to keep setup stable for import/visualization.
+    if any("G4" in name.upper() for name in gpu_names):
+        os.environ.setdefault("JAX_PLATFORMS", "cpu")
+        print("[FIX] G4 runtime detected, defaulting JAX backend to CPU for compatibility.")
 
     print("\n[CHECK] Environment variables")
     print("MUJOCO_GL =", os.environ.get("MUJOCO_GL"))
     # Keep XLA_FLAGS untouched by default to avoid Colab/CUDA/PTXAS mismatch.
     print("XLA_FLAGS =", os.environ.get("XLA_FLAGS", "<not set>"))
+    print("JAX_PLATFORMS =", os.environ.get("JAX_PLATFORMS", "<auto>"))
 
 
 def validate_imports() -> None:
@@ -101,8 +119,8 @@ def ensure_egl_icd_file_if_colab() -> None:
 def main() -> None:
     print("=== MuJoCo Environment Setup ===")
     ensure_pip_packages()
-    check_gpu()
-    configure_env_vars()
+    gpu_names = check_gpu()
+    configure_env_vars(gpu_names)
     ensure_egl_icd_file_if_colab()
     validate_imports()
     validate_playground_registry()
