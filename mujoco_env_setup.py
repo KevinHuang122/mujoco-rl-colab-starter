@@ -45,15 +45,10 @@ def configure_env_vars() -> None:
     # Colab usually needs this for MuJoCo EGL rendering.
     os.environ.setdefault("MUJOCO_GL", "egl")
 
-    # Helpful performance flag on many GPU setups.
-    xla_flags = os.environ.get("XLA_FLAGS", "")
-    if "--xla_gpu_triton_gemm_any=True" not in xla_flags:
-        xla_flags = (xla_flags + " --xla_gpu_triton_gemm_any=True").strip()
-        os.environ["XLA_FLAGS"] = xla_flags
-
     print("\n[CHECK] Environment variables")
     print("MUJOCO_GL =", os.environ.get("MUJOCO_GL"))
-    print("XLA_FLAGS =", os.environ.get("XLA_FLAGS"))
+    # Keep XLA_FLAGS untouched by default to avoid Colab/CUDA/PTXAS mismatch.
+    print("XLA_FLAGS =", os.environ.get("XLA_FLAGS", "<not set>"))
 
 
 def validate_imports() -> None:
