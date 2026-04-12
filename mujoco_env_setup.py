@@ -27,6 +27,7 @@ def ensure_pip_packages() -> None:
         "brax",
         "playground",
         "mediapy",
+        "torch",
         "warp-lang",
     ]
     run([sys.executable, "-m", "pip", "install", "-U", *packages])
