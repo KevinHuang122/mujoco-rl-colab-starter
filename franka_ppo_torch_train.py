@@ -15,6 +15,11 @@ import os
 from dataclasses import dataclass
 from typing import Any, Dict, List, Tuple
 
+# Force CPU-only backend before importing JAX to avoid WARP CUDA OOM on Colab.
+os.environ.setdefault("JAX_PLATFORMS", "cpu")
+os.environ.setdefault("CUDA_VISIBLE_DEVICES", "")
+os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
+
 import jax
 import jax.numpy as jnp
 import mediapy as media
@@ -31,7 +36,8 @@ from mujoco_playground import registry
 # Purpose: make Colab runtime stable (especially G4) and set seeds.
 # =========================
 def setup_runtime(seed: int = 1) -> None:
-    os.environ.setdefault("JAX_PLATFORMS", "cpu")
+    os.environ["JAX_PLATFORMS"] = "cpu"
+    os.environ["CUDA_VISIBLE_DEVICES"] = ""
     os.environ.setdefault("MUJOCO_GL", "egl")
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -63,6 +69,9 @@ def build_env_with_fixed_target(env_name: str = "PandaPickCubeOrientation"):
         if hasattr(env_cfg, key):
             config_overrides[key] = False
 
+    # Force MJX JAX implementation to avoid warp backend memory issues.
+    config_overrides["impl"] = "jax"
+
     if config_overrides:
         try:
             env = registry.load(env_name, config_overrides=config_overrides)
@@ -71,8 +80,14 @@ def build_env_with_fixed_target(env_name: str = "PandaPickCubeOrientation"):
         except TypeError:
             pass
 
-    env = registry.load(env_name)
-    print("[ENV] Loaded default config (no fixed-target override field found).")
+    # Fallback: still try forcing impl=jax even if other keys are unsupported.
+    try:
+        env = registry.load(env_name, config_overrides={"impl": "jax"})
+        print("[ENV] Loaded with impl=jax fallback.")
+        return env, env_cfg
+    except TypeError:
+        env = registry.load(env_name)
+        print("[ENV] Loaded default config (impl override unavailable in this version).")
     return env, env_cfg
 
 
@@ -329,6 +344,12 @@ def train_and_eval(
     obs_dim = int(np.asarray(init_state.obs).shape[0])
     act_dim = int(env.action_size)
     print(f"[INFO] obs_dim={obs_dim}, act_dim={act_dim}")
+    print(
+        "[INFO] JAX_PLATFORMS=",
+        os.environ.get("JAX_PLATFORMS"),
+        "CUDA_VISIBLE_DEVICES=",
+        os.environ.get("CUDA_VISIBLE_DEVICES"),
+    )
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = ActorCritic(obs_dim=obs_dim, act_dim=act_dim).to(device)
