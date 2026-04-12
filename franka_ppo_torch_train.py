@@ -334,17 +334,17 @@ def train_and_eval(
     model = ActorCritic(obs_dim=obs_dim, act_dim=act_dim).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
 
-    # Training hyperparameters (starter values).
-    total_steps = 30_000
-    horizon = 1024
+    # Training hyperparameters (fast demo defaults).
+    total_steps = 6_000
+    horizon = 512
     updates = total_steps // horizon
     gamma = 0.99
     lam = 0.95
     clip_ratio = 0.2
     value_coef = 0.5
     entropy_coef = 0.0
-    epochs = 10
-    mini_batch_size = 256
+    epochs = 5
+    mini_batch_size = 128
 
     print(f"[TRAIN] total_steps={total_steps}, updates={updates}")
     for u in range(1, updates + 1):
