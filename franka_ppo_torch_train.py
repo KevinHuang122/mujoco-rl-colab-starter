@@ -10,6 +10,7 @@ Run:
 
 from __future__ import annotations
 
+import argparse
 import os
 from dataclasses import dataclass
 from typing import Any, Dict, List, Tuple
@@ -293,7 +294,32 @@ def ppo_update(
 # Module 6: End-to-end train + evaluate
 # Purpose: orchestrate PPO training and export a video for visualization.
 # =========================
-def train_and_eval() -> None:
+def save_checkpoint(
+    save_path: str,
+    model: ActorCritic,
+    optimizer: torch.optim.Optimizer,
+    obs_dim: int,
+    act_dim: int,
+) -> None:
+    directory = os.path.dirname(save_path)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
+    torch.save(
+        {
+            "model_state_dict": model.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(),
+            "obs_dim": obs_dim,
+            "act_dim": act_dim,
+        },
+        save_path,
+    )
+    print(f"[SAVE] Checkpoint saved: {save_path}")
+
+
+def train_and_eval(
+    save_path: str = "franka_ppo_torch_ckpt.pt",
+    video_path: str = "franka_ppo_torch_eval.mp4",
+) -> None:
     setup_runtime(seed=1)
     env_name = "PandaPickCubeOrientation"
     env, env_cfg = build_env_with_fixed_target(env_name)
@@ -367,9 +393,34 @@ def train_and_eval() -> None:
 
     frames = env.render(eval_states)
     fps = 1.0 / float(env.dt)
-    media.write_video("franka_ppo_torch_eval.mp4", frames, fps=fps)
-    print("[EVAL] Saved video: franka_ppo_torch_eval.mp4")
+    video_dir = os.path.dirname(video_path)
+    if video_dir:
+        os.makedirs(video_dir, exist_ok=True)
+    media.write_video(video_path, frames, fps=fps)
+    print(f"[EVAL] Saved video: {video_path}")
+
+    save_checkpoint(
+        save_path=save_path,
+        model=model,
+        optimizer=optimizer,
+        obs_dim=obs_dim,
+        act_dim=act_dim,
+    )
 
 
 if __name__ == "__main__":
-    train_and_eval()
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--save_path",
+        type=str,
+        default="franka_ppo_torch_ckpt.pt",
+        help="Where to save the trained PyTorch checkpoint.",
+    )
+    parser.add_argument(
+        "--video_path",
+        type=str,
+        default="franka_ppo_torch_eval.mp4",
+        help="Where to save the evaluation video.",
+    )
+    args = parser.parse_args()
+    train_and_eval(save_path=args.save_path, video_path=args.video_path)
