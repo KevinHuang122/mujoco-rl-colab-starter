@@ -24,7 +24,9 @@ if BACKEND_MODE == "cpu_safe":
     os.environ.setdefault("JAX_PLATFORMS", "cpu")
     os.environ.setdefault("CUDA_VISIBLE_DEVICES", "")
 else:
-    os.environ.setdefault("JAX_PLATFORMS", "gpu")
+    # Let JAX auto-pick an available backend (typically cuda on Colab GPU).
+    # This avoids hard failures from unsupported platform strings like rocm.
+    os.environ.setdefault("JAX_PLATFORMS", "")
 os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
 
 import jax
@@ -47,7 +49,7 @@ def setup_runtime(seed: int = 1) -> None:
         os.environ["JAX_PLATFORMS"] = "cpu"
         os.environ["CUDA_VISIBLE_DEVICES"] = ""
     else:
-        os.environ["JAX_PLATFORMS"] = "gpu"
+        os.environ["JAX_PLATFORMS"] = ""
     os.environ.setdefault("MUJOCO_GL", "egl")
     np.random.seed(seed)
     torch.manual_seed(seed)
