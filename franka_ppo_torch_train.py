@@ -16,6 +16,12 @@ import pickle
 from datetime import datetime
 from typing import Any, Dict, List
 
+# Must be set before MuJoCo/GL related imports in headless Colab.
+os.environ.setdefault("MUJOCO_GL", "egl")
+os.environ.setdefault("PYOPENGL_PLATFORM", "egl")
+os.environ.setdefault("MJX_GPU_DEFAULT_WARP", "false")
+os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
+
 import jax
 import matplotlib.pyplot as plt
 import mediapy as media
@@ -27,9 +33,6 @@ from mujoco_playground.config import manipulation_params
 
 
 def setup_runtime(seed: int = 1) -> None:
-    os.environ.setdefault("MUJOCO_GL", "egl")
-    os.environ.setdefault("MJX_GPU_DEFAULT_WARP", "false")
-    os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
     print("[INFO] jax.default_backend()=", jax.default_backend())
     print("[INFO] seed=", seed)
 
