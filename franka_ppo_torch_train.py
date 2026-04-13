@@ -21,6 +21,7 @@ os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
 
 import jax
 import jax.numpy as jnp
+import matplotlib.pyplot as plt
 import mediapy as media
 import numpy as np
 import torch
@@ -335,6 +336,7 @@ def save_checkpoint(
 def train_and_eval(
     save_path: str = "franka_ppo_torch_ckpt.pt",
     video_path: str = "franka_ppo_torch_eval.mp4",
+    reward_plot_path: str = "franka_ppo_reward_curve.png",
     updates: int = 8,
 ) -> None:
     setup_runtime(seed=1)
@@ -379,6 +381,7 @@ def train_and_eval(
     mini_batch_size = 128
 
     print(f"[TRAIN] total_steps={total_steps}, updates={updates}")
+    reward_curve = []
     pbar = tqdm(range(1, updates + 1), desc="PPO Updates", unit="update")
     for u in pbar:
         batch, rollout_states, rng = collect_rollout(
@@ -401,11 +404,27 @@ def train_and_eval(
             mini_batch_size=mini_batch_size,
         )
         mean_ret = float(batch.returns.mean().item())
+        reward_curve.append(mean_ret)
         pbar.set_postfix(
             mean_return=f"{mean_ret:.3f}",
             loss_pi=f"{stats['loss_pi']:.4f}",
             loss_v=f"{stats['loss_v']:.4f}",
         )
+
+    # Save reward convergence curve.
+    plot_dir = os.path.dirname(reward_plot_path)
+    if plot_dir:
+        os.makedirs(plot_dir, exist_ok=True)
+    plt.figure(figsize=(8, 4))
+    plt.plot(range(1, len(reward_curve) + 1), reward_curve, marker="o")
+    plt.xlabel("Update")
+    plt.ylabel("Mean Return")
+    plt.title("PPO Reward Curve")
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(reward_plot_path, dpi=150)
+    plt.close()
+    print(f"[PLOT] Saved reward curve: {reward_plot_path}")
 
     # Simple evaluation rollout for visualization.
     eval_states = []
@@ -460,5 +479,16 @@ if __name__ == "__main__":
         default=8,
         help="Number of PPO update iterations.",
     )
+    parser.add_argument(
+        "--reward_plot_path",
+        type=str,
+        default="franka_ppo_reward_curve.png",
+        help="Where to save the reward curve plot image.",
+    )
     args = parser.parse_args()
-    train_and_eval(save_path=args.save_path, video_path=args.video_path, updates=args.updates)
+    train_and_eval(
+        save_path=args.save_path,
+        video_path=args.video_path,
+        reward_plot_path=args.reward_plot_path,
+        updates=args.updates,
+    )
