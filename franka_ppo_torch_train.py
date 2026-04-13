@@ -357,9 +357,9 @@ def train_and_eval(
     )
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    if jax.default_backend() != "cuda":
+    if jax.default_backend() not in {"cuda", "gpu"}:
         raise RuntimeError(
-            f"JAX backend is '{jax.default_backend()}', expected 'cuda'. "
+            f"JAX backend is '{jax.default_backend()}', expected one of ['cuda', 'gpu']. "
             "Please switch Colab runtime to GPU and restart runtime."
         )
     if device.type != "cuda":
