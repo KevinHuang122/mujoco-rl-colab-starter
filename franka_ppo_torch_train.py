@@ -73,7 +73,10 @@ def train_and_eval(
     save_path: str = "franka_ppo_jax_params.pkl",
     video_path: str = "franka_ppo_jax_eval.mp4",
     reward_plot_path: str = "franka_ppo_jax_reward_curve.png",
-    num_timesteps: int = 80_000,
+    num_timesteps: int = 5_000_000,
+    learning_rate: float = 1e-4,
+    entropy_cost: float = 3e-3,
+    num_evals: int = 12,
     seed: int = 1,
 ) -> None:
     setup_runtime(seed=seed)
@@ -82,7 +85,21 @@ def train_and_eval(
 
     ppo_params = dict(manipulation_params.brax_ppo_config(env_name))
     ppo_params["num_timesteps"] = int(num_timesteps)
-    ppo_params["num_evals"] = int(8)
+    ppo_params["num_evals"] = int(num_evals)
+    if "learning_rate" in ppo_params:
+        ppo_params["learning_rate"] = float(learning_rate)
+    if "entropy_cost" in ppo_params:
+        ppo_params["entropy_cost"] = float(entropy_cost)
+    print(
+        "[HYPER] num_timesteps=",
+        ppo_params.get("num_timesteps"),
+        "num_evals=",
+        ppo_params.get("num_evals"),
+        "learning_rate=",
+        ppo_params.get("learning_rate", "<default>"),
+        "entropy_cost=",
+        ppo_params.get("entropy_cost", "<default>"),
+    )
 
     # reward curve containers
     x_data: List[int] = []
@@ -181,7 +198,10 @@ def main() -> None:
     parser.add_argument("--save_path", type=str, default="franka_ppo_jax_params.pkl")
     parser.add_argument("--video_path", type=str, default="franka_ppo_jax_eval.mp4")
     parser.add_argument("--reward_plot_path", type=str, default="franka_ppo_jax_reward_curve.png")
-    parser.add_argument("--num_timesteps", type=int, default=80_000)
+    parser.add_argument("--num_timesteps", type=int, default=5_000_000)
+    parser.add_argument("--learning_rate", type=float, default=1e-4)
+    parser.add_argument("--entropy_cost", type=float, default=3e-3)
+    parser.add_argument("--num_evals", type=int, default=12)
     parser.add_argument("--seed", type=int, default=1)
     args = parser.parse_args()
 
@@ -190,6 +210,9 @@ def main() -> None:
         video_path=args.video_path,
         reward_plot_path=args.reward_plot_path,
         num_timesteps=args.num_timesteps,
+        learning_rate=args.learning_rate,
+        entropy_cost=args.entropy_cost,
+        num_evals=args.num_evals,
         seed=args.seed,
     )
 
