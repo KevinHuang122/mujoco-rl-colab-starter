@@ -335,6 +335,7 @@ def save_checkpoint(
 def train_and_eval(
     save_path: str = "franka_ppo_torch_ckpt.pt",
     video_path: str = "franka_ppo_torch_eval.mp4",
+    updates: int = 8,
 ) -> None:
     setup_runtime(seed=1)
     env_name = "PandaPickCubeOrientation"
@@ -367,9 +368,8 @@ def train_and_eval(
     optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
 
     # Training hyperparameters (fast demo defaults).
-    total_steps = 6_000
     horizon = 512
-    updates = total_steps // horizon
+    total_steps = int(updates * horizon)
     gamma = 0.99
     lam = 0.95
     clip_ratio = 0.2
@@ -454,5 +454,11 @@ if __name__ == "__main__":
         default="franka_ppo_torch_eval.mp4",
         help="Where to save the evaluation video.",
     )
+    parser.add_argument(
+        "--updates",
+        type=int,
+        default=8,
+        help="Number of PPO update iterations.",
+    )
     args = parser.parse_args()
-    train_and_eval(save_path=args.save_path, video_path=args.video_path)
+    train_and_eval(save_path=args.save_path, video_path=args.video_path, updates=args.updates)
