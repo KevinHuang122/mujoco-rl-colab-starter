@@ -15,18 +15,8 @@ import os
 from dataclasses import dataclass
 from typing import Any, Dict, List, Tuple
 
-# Backend mode:
-# - gpu_try (default): prefer GPU speed.
-# - cpu_safe: force CPU to avoid CUDA/WARP OOM issues.
-BACKEND_MODE = os.environ.get("FRANKA_BACKEND_MODE", "gpu_try").strip().lower()
-
-if BACKEND_MODE == "cpu_safe":
-    os.environ.setdefault("JAX_PLATFORMS", "cpu")
-    os.environ.setdefault("CUDA_VISIBLE_DEVICES", "")
-else:
-    # Let JAX auto-pick an available backend (typically cuda on Colab GPU).
-    # This avoids hard failures from unsupported platform strings like rocm.
-    os.environ.setdefault("JAX_PLATFORMS", "")
+# Force GPU-only execution for both JAX and PyTorch.
+os.environ["JAX_PLATFORMS"] = "cuda"
 os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
 
 import jax
@@ -36,6 +26,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.distributions import Normal
+from tqdm.auto import tqdm
 
 from mujoco_playground import registry
 
@@ -45,14 +36,12 @@ from mujoco_playground import registry
 # Purpose: make Colab runtime stable (especially G4) and set seeds.
 # =========================
 def setup_runtime(seed: int = 1) -> None:
-    if BACKEND_MODE == "cpu_safe":
-        os.environ["JAX_PLATFORMS"] = "cpu"
-        os.environ["CUDA_VISIBLE_DEVICES"] = ""
-    else:
-        os.environ["JAX_PLATFORMS"] = ""
+    os.environ["JAX_PLATFORMS"] = "cuda"
     os.environ.setdefault("MUJOCO_GL", "egl")
     np.random.seed(seed)
     torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
 
 
 # =========================
@@ -206,7 +195,7 @@ def collect_rollout(
     rollout_states.append(env_state)
 
     for _ in range(horizon):
-        obs_np = np.asarray(env_state.obs, dtype=np.float32)
+        obs_np = np.asarray(env_state.obs, dtype=np.float32).copy()
         obs_t = torch.as_tensor(obs_np, dtype=torch.float32, device=device).unsqueeze(0)
 
         with torch.no_grad():
@@ -235,7 +224,7 @@ def collect_rollout(
             env_state = env.reset(sub)
             rollout_states.append(env_state)
 
-    last_obs = np.asarray(env_state.obs, dtype=np.float32)
+    last_obs = np.asarray(env_state.obs, dtype=np.float32).copy()
     last_obs_t = torch.as_tensor(last_obs, dtype=torch.float32, device=device).unsqueeze(0)
     with torch.no_grad():
         last_value = float(model.value(last_obs_t).item())
@@ -356,15 +345,24 @@ def train_and_eval(
     obs_dim = int(np.asarray(init_state.obs).shape[0])
     act_dim = int(env.action_size)
     print(f"[INFO] obs_dim={obs_dim}, act_dim={act_dim}")
-    print("[INFO] BACKEND_MODE=", BACKEND_MODE)
+    print("[INFO] mode=GPU_ONLY")
     print(
         "[INFO] JAX_PLATFORMS=",
         os.environ.get("JAX_PLATFORMS"),
-        "CUDA_VISIBLE_DEVICES=",
-        os.environ.get("CUDA_VISIBLE_DEVICES", "<default>"),
+        "jax.default_backend()=",
+        jax.default_backend(),
     )
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if jax.default_backend() != "cuda":
+        raise RuntimeError(
+            f"JAX backend is '{jax.default_backend()}', expected 'cuda'. "
+            "Please switch Colab runtime to GPU and restart runtime."
+        )
+    if device.type != "cuda":
+        raise RuntimeError(
+            "PyTorch CUDA is unavailable. Please switch Colab runtime to GPU and restart runtime."
+        )
     model = ActorCritic(obs_dim=obs_dim, act_dim=act_dim).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
 
@@ -381,7 +379,8 @@ def train_and_eval(
     mini_batch_size = 128
 
     print(f"[TRAIN] total_steps={total_steps}, updates={updates}")
-    for u in range(1, updates + 1):
+    pbar = tqdm(range(1, updates + 1), desc="PPO Updates", unit="update")
+    for u in pbar:
         batch, rollout_states, rng = collect_rollout(
             env=env,
             model=model,
@@ -402,11 +401,10 @@ def train_and_eval(
             mini_batch_size=mini_batch_size,
         )
         mean_ret = float(batch.returns.mean().item())
-        print(
-            f"[TRAIN] update={u:02d}/{updates} "
-            f"mean_return={mean_ret:.3f} "
-            f"loss_pi={stats['loss_pi']:.4f} "
-            f"loss_v={stats['loss_v']:.4f}"
+        pbar.set_postfix(
+            mean_return=f"{mean_ret:.3f}",
+            loss_pi=f"{stats['loss_pi']:.4f}",
+            loss_v=f"{stats['loss_v']:.4f}",
         )
 
     # Simple evaluation rollout for visualization.
