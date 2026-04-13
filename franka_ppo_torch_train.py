@@ -79,7 +79,6 @@ def train_and_eval(
 
     ppo_params = dict(manipulation_params.brax_ppo_config(env_name))
     ppo_params["num_timesteps"] = int(num_timesteps)
-    ppo_params["seed"] = int(seed)
     ppo_params["num_evals"] = int(8)
 
     # reward curve containers
